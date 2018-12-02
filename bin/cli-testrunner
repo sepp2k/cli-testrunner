@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+
+require 'minitest/autorun'
+require 'open3'
+require 'tempfile'
+require 'yaml'
+
+if ARGV.length != 1
+    $stderr.puts "Usage: #$0 config.yaml"
+    exit 1
+end
+
+begin
+    $config = YAML.load_file(ARGV[0])
+rescue Exception => e
+    $stderr.puts "Could not open configuration file: #{e.message}"
+    exit 2
+end
+
+$tempfiles = {}
+
+at_exit do
+    $tempfiles.each_value do |tempfile|
+        tempfile.unlink
+    end
+end
+
+def process_command(cmd)
+    cmd.gsub(/\$tempfile(\d+)/) do
+        tempfile = ($tempfiles[$1] ||= Tempfile.new)
+        tempfile.close
+        tempfile.path
+    end
+end
+
+Dir.chdir(File.join(File.dirname(ARGV[0])))
+
+if $config["init"]
+    command = process_command($config["init"])
+    if !system(command)
+        $stderr.puts("Command '#{command}' failed with exit code #$?")
+        exit 3
+    end
+end
+
+def run_phase(phase, test_case)
+    command = process_command(phase["command"])
+    in_stream, out, err, process = Open3::popen3(command)
+    if (input_field = phase["input"]) && (input = test_case[input_field])
+        in_stream << input
+    end
+    in_stream.close
+    out = out.read
+    err = err.read
+    if err_field = phase["stderr"]
+        expected_err = test_case[err_field] || ""
+        err.must_equal expected_err
+    end
+    actual_ec = process.value.exitstatus
+    if ec_field = phase["exit_status"]
+        expected_ec = test_case[ec_field]
+        expected_ec = 0 if expected_ec == :success
+    end
+    expected_ec ||= 0
+    if expected_ec == :failure
+        actual_ec.wont_equal 0
+    elsif expected_ec
+        actual_ec.must_equal expected_ec
+    end
+    if out_field = phase["stdout"]
+        expected_out = test_case[out_field] || ""
+        out.must_equal expected_out
+    end
+    actual_ec == 0
+end
+
+Dir.glob("**/*.test_suite") do |test_file|
+    suite_name = test_file.gsub(/\.test_suite$/, "")
+    describe suite_name do
+        suite = YAML.load_file(test_file)
+        suite.each do |test_name, test_case|
+            it test_name do
+                $config["phases"].each do |phase|
+                    test_case_phase = test_case[phase["name"]]
+                    if test_case_phase.is_a? Array
+                        success = test_case_phase.all? {|tc| run_phase(phase, tc)}
+                    else
+                        success = run_phase(phase, test_case_phase)
+                    end
+                    break unless success
+                end
+            end
+        end
+    end
+end
