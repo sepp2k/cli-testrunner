@@ -1,9 +1,12 @@
 #!/usr/bin/env ruby
 
 require 'minitest/autorun'
+require 'minitest/reporters'
 require 'open3'
 require 'tempfile'
 require 'yaml'
+
+MiniTest::Reporters.use!(MiniTest::Reporters::SpecReporter.new)
 
 if ARGV.length != 1
     $stderr.puts "Usage: #$0 config.yaml"
@@ -54,7 +57,9 @@ def run_phase(phase, test_case)
     err = err.read
     if err_field = phase["stderr"]
         expected_err = test_case[err_field] || ""
-        err.must_equal expected_err
+        it "must produce the desired stderr" do
+            err.must_equal expected_err
+        end
     end
     actual_ec = process.value.exitstatus
     if ec_field = phase["exit_status"]
@@ -63,15 +68,41 @@ def run_phase(phase, test_case)
     end
     expected_ec ||= 0
     if expected_ec == :failure
-        actual_ec.wont_equal 0
+        it "must have a non-zero exit code" do
+            actual_ec.wont_equal 0
+        end
     elsif expected_ec
-        actual_ec.must_equal expected_ec
+        it "must have the exit code #{expected_ec}" do
+            actual_ec.must_equal expected_ec
+        end
     end
     if out_field = phase["stdout"]
         expected_out = test_case[out_field] || ""
-        out.must_equal expected_out
+        it "must produce the desired output" do
+            out.must_equal expected_out
+        end
     end
     actual_ec == 0
+end
+
+def run_test(test_case)
+    $config["phases"].each do |phase|
+        success = false
+        describe phase["name"] do
+            if test_case_phase = test_case[phase["name"]]
+                if test_case_phase.is_a? Array
+                    success = test_case_phase.each_with_index.all? do |tc, i|
+                        describe "test_case#{i+1}" do
+                            run_phase(phase, tc)
+                        end
+                    end
+                else
+                    success = run_phase(phase, test_case_phase)
+                end
+            end
+        end
+        return unless success
+    end
 end
 
 Dir.glob("**/*.test_suite") do |test_file|
@@ -79,16 +110,8 @@ Dir.glob("**/*.test_suite") do |test_file|
     describe suite_name do
         suite = YAML.load_file(test_file)
         suite.each do |test_name, test_case|
-            it test_name do
-                $config["phases"].each do |phase|
-                    test_case_phase = test_case[phase["name"]]
-                    if test_case_phase.is_a? Array
-                        success = test_case_phase.all? {|tc| run_phase(phase, tc)}
-                    else
-                        success = run_phase(phase, test_case_phase)
-                    end
-                    break unless success
-                end
+            describe test_name do
+                run_test(test_case)
             end
         end
     end
