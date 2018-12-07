@@ -55,12 +55,6 @@ def run_phase(phase, test_case)
     in_stream.close
     out = out.read
     err = err.read
-    if err_field = phase["stderr"]
-        expected_err = test_case[err_field] || ""
-        it "must produce the desired stderr" do
-            err.must_equal expected_err
-        end
-    end
     actual_ec = process.value.exitstatus
     if ec_field = phase["exit_status"]
         expected_ec = test_case[ec_field]
@@ -79,7 +73,13 @@ def run_phase(phase, test_case)
     if out_field = phase["stdout"]
         expected_out = test_case[out_field] || ""
         it "must produce the desired output" do
-            out.must_equal expected_out
+            out.gsub("\r", '').must_equal expected_out.gsub("\r", '')
+        end
+    end
+    if err_field = phase["stderr"]
+        expected_err = test_case[err_field] || ""
+        it "must produce the desired stderr" do
+            err.gsub("\r", '').must_equal expected_err.gsub("\r", '')
         end
     end
     actual_ec == 0
