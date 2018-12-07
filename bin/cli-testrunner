@@ -41,7 +41,7 @@ Dir.chdir(File.join(File.dirname(ARGV[0])))
 if $config["init"]
     command = process_command($config["init"])
     if !system(command)
-        $stderr.puts("Command '#{command}' failed with exit code #$?")
+        $stderr.puts("Command '#{command}' failed with exit code #{$?.exitstatus}")
         exit 3
     end
 end
