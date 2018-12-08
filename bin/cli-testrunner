@@ -23,8 +23,8 @@ end
 $tempfiles = {}
 
 def process_command(cmd)
-    cmd.gsub(/\$tempfile(\d+)/) do
-        tempfile = ($tempfiles[$1] ||= Tempfile.new)
+    cmd.gsub(/\$tempfile((\w+)(\.[\w.]+)?)/) do
+        tempfile = ($tempfiles[$1] ||= Tempfile.new([$2, $3]))
         tempfile.close
         tempfile.path
     end
