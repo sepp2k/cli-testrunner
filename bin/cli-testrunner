@@ -22,12 +22,6 @@ end
 
 $tempfiles = {}
 
-at_exit do
-    $tempfiles.each_value do |tempfile|
-        tempfile.unlink
-    end
-end
-
 def process_command(cmd)
     cmd.gsub(/\$tempfile(\d+)/) do
         tempfile = ($tempfiles[$1] ||= Tempfile.new)
