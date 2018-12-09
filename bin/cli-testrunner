@@ -4,6 +4,8 @@ require 'minitest/autorun'
 require 'minitest/reporters'
 require 'open3'
 require 'tempfile'
+require 'tmpdir'
+require 'fileutils'
 require 'yaml'
 
 MiniTest::Reporters.use!(MiniTest::Reporters::SpecReporter.new)
@@ -21,12 +23,21 @@ rescue Exception => e
 end
 
 $tempfiles = {}
+$tempdirs = {}
 
 def process_command(cmd)
     cmd.gsub(/\$tempfile((\w+)(\.[\w.]+)?)/) do
         tempfile = ($tempfiles[$1] ||= Tempfile.new([$2, $3]))
         tempfile.close
         tempfile.path
+    end.gsub(/\$tempdir([\w.]+)/) do
+        $tempdirs[$1] ||= Dir.mktmpdir($1)
+    end
+end
+
+at_exit do
+    $tempdirs.each do |tempdir|
+        FileUtils.rm_rf tempdir
     end
 end
 
